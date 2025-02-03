@@ -1,3 +1,34 @@
+Backtesting-Extended.py
+==============
+
+I want to make the backtesting library better. 
+Right now, I am working on improving the visualization of orders on the chart 
+and fixing bugs that interfere with my work.
+
+Changes from original backtesting.py lib
+==============
+* Added exctended draw mode for better PL chart drawing (Orders Profit/Loss chart improvements):
+---------------
+Before: 
+
+![image](https://github.com/user-attachments/assets/cbf1ccea-a466-4ee8-95f4-90efa9071f03)
+
+Now: 
+
+![image](https://github.com/user-attachments/assets/785e608d-f76d-4845-808e-7a32ca0a7d5e)
+
+WIP:
+---------------
+* FIX: Assert if TP or SP or Limit order price < 0 or optionally ignore orders creation in this case (with an error message). The issue happens in high-volatility crypto with ATR-based TP, SL or limit orders so price is changes too fast for ATR to take it into account.
+* Option to change Up and Down triangles colors and symbols when close order (for Profit/Loss chart)
+* Option to show triangles up and down when order opens and other draw symbols when order closed by TP or SL or manually.
+* More options for chart drawing exposed for the user
+* TP and SL dynamic change support for orders (Order modification feature)
+* Backward and forward optimization
+* WFO optimization
+* Multithreading optimization support
+
+
 [![](https://i.imgur.com/E8Kj69Y.png)](https://kernc.github.io/backtesting.py/)
 
 Backtesting.py
@@ -18,7 +49,19 @@ Backtest trading strategies with Python.
 Installation
 ------------
 
-    $ pip install backtesting
+    $ git uninstall backtesting
+    $ git submodule add https://github.com/mmortall/backtesting-ext.py.git libs/backtesting
+    $ git config --global submodule.recurse true
+    $ git submodule update --init --recursive
+    $ git submodule update --remote --merge
+
+    # Add in python code before use backtesting add:
+    sys.path.insert(0, os.path.abspath("libs/backtesting"))
+
+    # and then use it like you used backtesting before
+    from backtesting import Backtest, Strategy
+    from backtesting.lib import crossover, plot_heatmaps, resample_apply
+    
 
 
 Usage
