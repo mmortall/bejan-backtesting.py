@@ -13,10 +13,8 @@ import numpy as np
 import pandas as pd
 
 from bokeh.colors import RGB
-from bokeh.colors.named import (
-    lime as BULL_COLOR,
-    tomato as BEAR_COLOR
-)
+import bokeh.colors.named as colors
+
 from bokeh.plotting import figure as _figure
 from bokeh.models import (  # type: ignore
     CrosshairTool,
@@ -41,6 +39,14 @@ from bokeh.palettes import Category10
 from bokeh.transform import factor_cmap
 
 from backtesting._util import _data_period, _as_list, _Indicator
+
+_MAX_CANDLES = 20_000
+
+BULL_COLOR = colors.lime
+BEAR_COLOR = colors.tomato
+COLOR_TP = colors.lime
+COLOR_SL = colors.tomato
+COLOR_MANUAL_CLOSE = colors.black
 
 with open(os.path.join(os.path.dirname(__file__), 'autoscale_cb.js'),
           encoding='utf-8') as _f:
@@ -92,9 +98,6 @@ def lightness(color, lightness=.94):
     h, _, s = rgb_to_hls(*rgb)
     rgb = (np.array(hls_to_rgb(h, lightness, s)) * 255).astype(int)
     return RGB(*rgb)
-
-
-_MAX_CANDLES = 10_000
 
 
 def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
@@ -172,7 +175,11 @@ def plot(*, results: pd.Series,
          smooth_equity=False, relative_equity=True,
          superimpose=True, resample=True,
          reverse_indicators=True,
-         show_legend=True, open_browser=True):
+         show_legend=True, open_browser=True,
+         
+         plot_pl_extended_plot=True,
+         plot_customization_dic=None
+         ):
     """
     Like much of GUI code everywhere, this is a mess.
     """
@@ -184,6 +191,8 @@ def plot(*, results: pd.Series,
     _bokeh_reset(filename)
 
     COLORS = [BEAR_COLOR, BULL_COLOR]
+    COLORS_ORDER_OPEN = [colors.tomato, colors.skyblue]
+    COLORS_ORDER_CLOSED = [COLOR_SL, COLOR_TP, COLOR_MANUAL_CLOSE]
     BAR_WIDTH = .8
 
     assert df.index.equals(results['_equity_curve'].index)
@@ -239,9 +248,35 @@ def plot(*, results: pd.Series,
         size=trades['Size'],
         returns_positive=(trades['ReturnPct'] > 0).astype(int).astype(str),
     ))
+    
+    trade_source_pos = ColumnDataSource(dict(
+        index=trades['ExitBar'],
+        datetime=trades['ExitTime'],
+        exit_price=trades['ExitPrice'],
+        size=trades['Size'],
+        returns_positive=(trades['ReturnPct'] > 0).astype(int).astype(str),
+    ))
+    
+    trade_source_neg = ColumnDataSource(dict(
+        index=trades['ExitBar'],
+        datetime=trades['ExitTime'],
+        exit_price=trades['ExitPrice'],
+        size=trades['Size'],
+        returns_positive=(trades['ReturnPct'] > 0).astype(int).astype(str),
+    ))
+    
+    trade_source_start = ColumnDataSource(dict(
+        index=trades['EntryBar'],
+        datetime=trades['EntryTime'],
+        exit_price=trades['EntryPrice'],
+        size=trades['Size'],
+        trading_direction=(trades['Size'] > 0).astype(int).astype(str),
+    ))
 
     inc_cmap = factor_cmap('inc', COLORS, ['0', '1'])
     cmap = factor_cmap('returns_positive', COLORS, ['0', '1'])
+    cmap_order_open = factor_cmap('trading_direction', COLORS_ORDER_OPEN, ['0', '1'])
+    cmap_order_closed = factor_cmap('returns_positive', COLORS_ORDER_CLOSED, ['0', '1', '2'])
     colors_darker = [lightness(BEAR_COLOR, .35),
                      lightness(BULL_COLOR, .35)]
     trades_cmap = factor_cmap('returns_positive', colors_darker, ['0', '1'])
@@ -411,19 +446,77 @@ return this.labels[index] || "";
         trade_source.add(returns_long, 'returns_long')
         trade_source.add(returns_short, 'returns_short')
         trade_source.add(size, 'marker_size')
+    
         if 'count' in trades:
             trade_source.add(trades['count'], 'count')
-        r1 = fig.scatter('index', 'returns_long', source=trade_source, fill_color=cmap,
-                         marker='triangle', line_color='black', size='marker_size')
-        r2 = fig.scatter('index', 'returns_short', source=trade_source, fill_color=cmap,
-                         marker='inverted_triangle', line_color='black', size='marker_size')
+            
         tooltips = [("Size", "@size{0,0}")]
         if 'count' in trades:
             tooltips.append(("Count", "@count{0,0}"))
+            
+        if plot_pl_extended_plot:
+            trades['ReturnPct_positive'] = np.where(trades['ReturnPct'] >= 0, trades['ReturnPct'], np.nan)
+            trades['ReturnPct_negative'] = np.where(trades['ReturnPct'] < 0, trades['ReturnPct'], np.nan)
+            
+            trade_source.add(trades['ReturnPct_positive'], 'ReturnPct_positive')
+            trade_source.add(trades['ReturnPct_negative'], 'ReturnPct_negative')
+
+            returns_long = np.where(trades['Size'] > 0, 0, np.nan)
+            returns_short = np.where(trades['Size'] < 0, 0, np.nan)
+            trade_source_start.add(returns_long, 'returns_long')
+            trade_source_start.add(returns_short, 'returns_short')
+            trade_source_start.add(size, 'marker_size')
+            
+            r1 = fig.scatter('index', 'returns_long', source=trade_source_start, fill_color=cmap_order_open,
+                    marker='triangle', line_color='black', size='marker_size')
+            r2 = fig.scatter('index', 'returns_short', source=trade_source_start, fill_color=cmap_order_open,
+                    marker='inverted_triangle', line_color='black', size='marker_size')
+            
+            # different markers for positive and negative trades
+            #use_custom_symbol_for_positive_trade = '\u2714'
+            use_custom_symbol_for_positive_trade = None
+            if use_custom_symbol_for_positive_trade:
+                trade_source.data['custom_symbol'] = [use_custom_symbol_for_positive_trade] * len(trade_source.data['index'])
+                r3 = fig.text(
+                    x='index',
+                    y='ReturnPct_positive',
+                    source=trade_source,
+                    text='custom_symbol',
+                    text_font_size="12pt",         # Adjust size as needed
+                    text_color=cmap_order_closed,  # Use your desired color
+                    text_align="center",
+                    text_baseline="middle"
+                )
+            else:
+                r3 = fig.scatter('index', 'ReturnPct_positive', source=trade_source, fill_color=cmap_order_closed,
+                marker='star', line_color=colors.green, size='marker_size')
+                
+            r4 = fig.scatter('index', 'ReturnPct_negative', source=trade_source, fill_color=cmap_order_closed,
+                    marker='x', line_color=cmap_order_closed, size='marker_size')
+            
+            trade_source.add(trades[['EntryBar', 'ExitBar']].values.tolist(), 'position_lines_xs2')
+            trade_source.add([[0, pct] for pct in trades['ReturnPct']], 'position_lines_ys2')   
+            fig.multi_line(xs='position_lines_xs2', ys='position_lines_ys2',
+                                source=trade_source, line_color=cmap_order_closed,
+                                legend_label=f'Trades ({len(trades)})',
+                                line_width=2, line_alpha=0.7, line_dash='solid')
+            
+            set_tooltips(fig, tooltips + [("P/L", "@returns_long{+0.[000]%}")],
+                        vline=False, renderers=[r3])
+            set_tooltips(fig, tooltips + [("P/L", "@returns_short{+0.[000]%}")],
+                        vline=False, renderers=[r4])
+            
+        else:
+            r1 = fig.scatter('index', 'returns_long', source=trade_source, fill_color=cmap,
+                    marker='triangle', line_color='black', size='marker_size')
+            r2 = fig.scatter('index', 'returns_short', source=trade_source, fill_color=cmap,
+                    marker='inverted_triangle', line_color='black', size='marker_size')
+        
         set_tooltips(fig, tooltips + [("P/L", "@returns_long{+0.[000]%}")],
                      vline=False, renderers=[r1])
         set_tooltips(fig, tooltips + [("P/L", "@returns_short{+0.[000]%}")],
                      vline=False, renderers=[r2])
+        
         fig.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
         return fig
 

@@ -1637,7 +1637,10 @@ class Backtest:
              smooth_equity=False, relative_equity=True,
              superimpose: Union[bool, str] = True,
              resample=True, reverse_indicators=False,
-             show_legend=True, open_browser=True):
+             show_legend=True, open_browser=True,
+             plot_pl_extended_plot=True,
+             # todo: plot_customization_dic=None 
+             ):
         """
         Plot the progression of the last backtest run.
 
@@ -1715,7 +1718,29 @@ class Backtest:
         labeled legends.
 
         If `open_browser` is `True`, the resulting `filename` will be
-        opened in the default web browser.
+            opened in the default web browser.
+        
+        If plot_pl_extended_plot is `True`, plots PL chart differently. Order start with triangles markers,
+            and trade exit marks as negative (cross) marker or positive (checkmark) symbols with lines connected it. 
+            This allow more clear vision where order was openned and closed
+            
+        WIP:
+        plot_customization_dic options:
+            plot_pl_long_order_color,
+            plot_pl_long_order_marker,
+            plot_pl_long_order_symbol, if defined overrides plot_pl_long_order_marker
+            plot_pl_short_order_color,
+            plot_pl_short_order_marker,
+            plot_pl_short_order_symbol, if defined overrides plot_pl_short_order_marker
+            plot_pl_order_profit_color,
+            plot_pl_order_profit_marker,
+            plot_pl_order_profit_symbol,
+            plot_pl_order_profit_line_width,
+            plot_pl_order_loss_color,
+            plot_pl_order_loss_marker,
+            plot_pl_order_loss_symbol,  
+            plot_pl_order_loss_line_width,
+            
         """
         if results is None:
             if self._results is None:
@@ -1740,4 +1765,5 @@ class Backtest:
             resample=resample,
             reverse_indicators=reverse_indicators,
             show_legend=show_legend,
-            open_browser=open_browser)
+            open_browser=open_browser,
+            plot_pl_extended_plot=plot_pl_extended_plot)
