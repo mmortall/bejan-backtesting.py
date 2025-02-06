@@ -12,6 +12,7 @@ import multiprocessing as mp
 import os
 import sys
 import warnings
+import logging as log
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
@@ -220,13 +221,25 @@ class Strategy(metaclass=ABCMeta):
         def __repr__(self): return '.9999'
     _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
+
+    def _is_invalid_data(self, lim_price, sl, tp):
+        if (tp and tp < 0) or (sl and sl < 0) or (lim_price and lim_price < 0):
+            if exception_on_error:
+                raise ValueError(
+                    "Long orders require: "
+                    f"{sl} < 0 or {tp} < 0 or {lim_price} < 0")
+            else:
+                log.error(f"{sl} < 0 or {tp} < 0 or {lim_price} < 0")
+    
+    
     def buy(self, *,
             size: float = _FULL_EQUITY,
             limit: Optional[float] = None,
             stop: Optional[float] = None,
             sl: Optional[float] = None,
             tp: Optional[float] = None,
-            tag: object = None) -> 'Order':
+            tag: object = None,
+            exception_on_error = False) -> Union['Order', None]:
         """
         Place a new long order and return it. For explanation of parameters, see `Order`
         and its properties.
@@ -239,6 +252,10 @@ class Strategy(metaclass=ABCMeta):
 
         See also `Strategy.sell()`.
         """
+        
+        if self._is_invalid_data(limit, sl, tp):
+            return None
+        
         assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
         return self._broker.new_order(size, limit, stop, sl, tp, tag)
@@ -249,7 +266,7 @@ class Strategy(metaclass=ABCMeta):
              stop: Optional[float] = None,
              sl: Optional[float] = None,
              tp: Optional[float] = None,
-             tag: object = None) -> 'Order':
+             tag: object = None) -> Union['Order', None]:
         """
         Place a new short order and return it. For explanation of parameters, see `Order`
         and its properties.
@@ -260,6 +277,9 @@ class Strategy(metaclass=ABCMeta):
             If you merely want to close an existing long position,
             use `Position.close()` or `Trade.close()`.
         """
+        if self._is_invalid_data(limit, sl, tp):
+            return None
+        
         assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
         return self._broker.new_order(-size, limit, stop, sl, tp, tag)
